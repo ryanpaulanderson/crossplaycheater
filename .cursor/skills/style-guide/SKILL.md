@@ -1,0 +1,53 @@
+---
+name: style-guide
+description: Python style guide for this project. Apply when working with Python files or Python code.
+---
+
+# Python Style Guide
+
+## Docstrings
+
+Use Sphinx-style reStructuredText (rST) docstrings for all modules, classes, functions, and methods.
+
+```python
+def fetch_user(user_id: int, include_metadata: bool = False) -> User:
+    """
+    Retrieve a user by ID.
+
+    :param user_id: The unique identifier for the user.
+    :param include_metadata: Whether to include additional metadata.
+    :returns: The requested user object.
+    :raises UserNotFoundError: If no user exists with the given ID.
+    """
+```
+
+## Type Hints
+
+- Required for all function and method signatures.
+- Preferred for variables.
+- Avoid `Any` when possible.
+- Use `from __future__ import annotations` in all modules.
+
+## Naming
+
+Follow PEP 8: `snake_case` for functions/variables, `PascalCase` for classes, `UPPER_CASE` for constants.
+
+## Formatting
+
+Use Ruff for formatting and linting.
+
+## Data Classes
+
+Use `@dataclass` for data-carrying classes.
+
+## Logging
+
+Use the `logging` module with structured keys:
+
+```python
+logger.info("user_created", extra={"user_id": user.id, "email": user.email})
+```
+
+## Testing
+
+Write high-level, end-to-end unit tests. Avoid testing every small method in isolation.
