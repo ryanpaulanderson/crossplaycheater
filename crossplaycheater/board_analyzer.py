@@ -11,6 +11,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 from crossplaycheater.board import BOARD_SIZE, ScrabbleBoard
+from crossplaycheater.preprocessing import (ImagePreprocessor,
+                                            PreprocessingConfig)
 
 logger = logging.getLogger(__name__)
 
@@ -21,19 +23,28 @@ class AnalyzerConfig:
     Configuration for the board analyzer.
 
     :param min_cell_size: Minimum expected cell size in pixels.
+    :type min_cell_size: int
     :param ocr_confidence_threshold: Minimum confidence for OCR results (0-1).
+    :type ocr_confidence_threshold: float
     :param empty_cell_threshold: Max non-white pixels to consider cell empty.
+    :type empty_cell_threshold: float
     :param languages: Languages for OCR engine.
+    :type languages: list[str] | None
+    :param preprocessing: Configuration for image preprocessing.
+    :type preprocessing: PreprocessingConfig | None
     """
 
     min_cell_size: int = 20
     ocr_confidence_threshold: float = 0.5
     empty_cell_threshold: float = 0.15
     languages: list[str] | None = None
+    preprocessing: PreprocessingConfig | None = None
 
     def __post_init__(self) -> None:
         if self.languages is None:
             self.languages = ["en"]
+        if self.preprocessing is None:
+            self.preprocessing = PreprocessingConfig()
 
 
 class BoardAnalyzer:
@@ -41,10 +52,18 @@ class BoardAnalyzer:
     Analyzes Scrabble board screenshots and extracts the board state.
 
     :param config: Analyzer configuration options.
+    :type config: AnalyzerConfig
     """
 
     def __init__(self, config: AnalyzerConfig | None = None) -> None:
+        """
+        Initialize the board analyzer.
+
+        :param config: Analyzer configuration options.
+        :type config: AnalyzerConfig | None
+        """
         self.config = config or AnalyzerConfig()
+        self.preprocessor = ImagePreprocessor(self.config.preprocessing)
         self._ocr_reader: "easyocr.Reader | None" = None
 
     @property
@@ -53,6 +72,7 @@ class BoardAnalyzer:
         Lazy-load the OCR reader to avoid slow startup.
 
         :returns: Initialized EasyOCR reader.
+        :rtype: easyocr.Reader
         """
         if self._ocr_reader is None:
             import easyocr
@@ -65,7 +85,9 @@ class BoardAnalyzer:
         Analyze a screenshot and extract the board state.
 
         :param image_path: Path to the screenshot image.
+        :type image_path: str | Path
         :returns: ScrabbleBoard representing the detected state.
+        :rtype: ScrabbleBoard
         :raises FileNotFoundError: If image path does not exist.
         :raises ValueError: If board grid cannot be detected.
         """
@@ -105,12 +127,12 @@ class BoardAnalyzer:
         Detect and extract the Scrabble board region from the image.
 
         :param image: Input image as numpy array.
+        :type image: NDArray[np.uint8]
         :returns: Cropped and perspective-corrected board image.
+        :rtype: NDArray[np.uint8]
         :raises ValueError: If board cannot be detected.
         """
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        edges = cv2.Canny(blurred, 50, 150)
+        edges = self.preprocessor.process_for_detection(image)
 
         # Find contours
         contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -136,8 +158,11 @@ class BoardAnalyzer:
         Find the contour most likely to be the Scrabble board.
 
         :param contours: List of detected contours.
+        :type contours: list[NDArray[np.int32]]
         :param image_shape: Shape of the source image.
+        :type image_shape: tuple[int, ...]
         :returns: Four corner points of the board, or None if not found.
+        :rtype: NDArray[np.float32] | None
         """
         image_area = image_shape[0] * image_shape[1]
         min_board_area = image_area * 0.1  # Board should be at least 10% of image
@@ -171,8 +196,11 @@ class BoardAnalyzer:
         Apply perspective transform to straighten the board.
 
         :param image: Source image.
+        :type image: NDArray[np.uint8]
         :param corners: Four corner points of the board.
+        :type corners: NDArray[np.float32]
         :returns: Perspective-corrected square image.
+        :rtype: NDArray[np.uint8]
         """
         # Order corners: top-left, top-right, bottom-right, bottom-left
         corners = self._order_corners(corners)
@@ -200,7 +228,9 @@ class BoardAnalyzer:
         Order corners as: top-left, top-right, bottom-right, bottom-left.
 
         :param corners: Unordered corner points.
+        :type corners: NDArray[np.float32]
         :returns: Ordered corner points.
+        :rtype: NDArray[np.float32]
         """
         # Sort by y-coordinate to get top and bottom pairs
         sorted_by_y = corners[np.argsort(corners[:, 1])]
@@ -220,7 +250,9 @@ class BoardAnalyzer:
         Extract individual cell images from the board.
 
         :param board_image: Perspective-corrected board image.
+        :type board_image: NDArray[np.uint8]
         :returns: 15x15 list of cell images.
+        :rtype: list[list[NDArray[np.uint8]]]
         """
         height, width = board_image.shape[:2]
         cell_height = height // BOARD_SIZE
@@ -256,9 +288,13 @@ class BoardAnalyzer:
         Recognize the letter in a cell image.
 
         :param cell_image: Image of a single cell.
+        :type cell_image: NDArray[np.uint8]
         :param row: Row index for logging.
+        :type row: int
         :param col: Column index for logging.
+        :type col: int
         :returns: Recognized letter, or None if cell is empty.
+        :rtype: str | None
         """
         # Check if cell appears empty
         if self._is_cell_empty(cell_image):
@@ -291,7 +327,9 @@ class BoardAnalyzer:
         Determine if a cell appears to be empty (no tile).
 
         :param cell_image: Image of a single cell.
+        :type cell_image: NDArray[np.uint8]
         :returns: True if cell appears empty.
+        :rtype: bool
         """
         gray = cv2.cvtColor(cell_image, cv2.COLOR_BGR2GRAY)
 
@@ -313,24 +351,11 @@ class BoardAnalyzer:
         Preprocess cell image for better OCR results.
 
         :param cell_image: Raw cell image.
+        :type cell_image: NDArray[np.uint8]
         :returns: Preprocessed image optimized for OCR.
+        :rtype: NDArray[np.uint8]
         """
-        # Convert to grayscale
-        gray = cv2.cvtColor(cell_image, cv2.COLOR_BGR2GRAY)
-
-        # Resize to consistent size for OCR
-        target_size = 64
-        gray = cv2.resize(gray, (target_size, target_size), interpolation=cv2.INTER_CUBIC)
-
-        # Apply adaptive thresholding
-        binary = cv2.adaptiveThreshold(
-            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-        )
-
-        # Denoise
-        denoised = cv2.fastNlMeansDenoising(binary, None, 10, 7, 21)
-
-        return denoised
+        return self.preprocessor.process_for_ocr(cell_image)
 
 
 def analyze_board(image_path: str | Path, config: AnalyzerConfig | None = None) -> ScrabbleBoard:
@@ -338,8 +363,11 @@ def analyze_board(image_path: str | Path, config: AnalyzerConfig | None = None) 
     Convenience function to analyze a board image.
 
     :param image_path: Path to the screenshot.
+    :type image_path: str | Path
     :param config: Optional analyzer configuration.
+    :type config: AnalyzerConfig | None
     :returns: Detected board state.
+    :rtype: ScrabbleBoard
     """
     analyzer = BoardAnalyzer(config)
     return analyzer.analyze(image_path)

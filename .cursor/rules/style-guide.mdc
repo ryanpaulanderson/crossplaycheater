@@ -1,6 +1,6 @@
 ---
-name: style-guide
-description: Python style guide for this project. Apply when working with Python files or Python code.
+description: Python style guide for this project
+alwaysApply: true
 ---
 
 # Python Style Guide

@@ -14,13 +14,21 @@ class Cell:
     Represents a single cell on the Scrabble board.
 
     :param letter: The letter in this cell, or None if empty.
+    :type letter: str | None
     :param is_blank: Whether this is a blank tile (wildcard).
+    :type is_blank: bool
     """
 
     letter: str | None = None
     is_blank: bool = False
 
     def __str__(self) -> str:
+        """
+        Return string representation of the cell.
+
+        :returns: The letter (uppercase for normal, lowercase for blank) or '.' if empty.
+        :rtype: str
+        """
         if self.letter is None:
             return "."
         return self.letter.lower() if self.is_blank else self.letter.upper()
@@ -32,6 +40,7 @@ class ScrabbleBoard:
     Represents a 15x15 Scrabble board.
 
     :param grid: 2D list of Cell objects representing the board state.
+    :type grid: list[list[Cell]]
     """
 
     grid: list[list[Cell]] = field(default_factory=lambda: [
@@ -45,7 +54,9 @@ class ScrabbleBoard:
 
         :param rows: List of 15 strings, each 15 characters. Use '.' for empty,
                      uppercase for normal tiles, lowercase for blank tiles.
+        :type rows: list[str]
         :returns: A new ScrabbleBoard instance.
+        :rtype: ScrabbleBoard
         :raises ValueError: If input dimensions are incorrect.
         """
         if len(rows) != BOARD_SIZE:
@@ -71,8 +82,11 @@ class ScrabbleBoard:
         Get the cell at the specified position.
 
         :param row: Row index (0-14).
+        :type row: int
         :param col: Column index (0-14).
+        :type col: int
         :returns: The Cell at that position.
+        :rtype: Cell
         """
         return self.grid[row][col]
 
@@ -81,9 +95,13 @@ class ScrabbleBoard:
         Set a letter at the specified position.
 
         :param row: Row index (0-14).
+        :type row: int
         :param col: Column index (0-14).
+        :type col: int
         :param letter: The letter to place, or None to clear.
+        :type letter: str | None
         :param is_blank: Whether this is a blank tile.
+        :type is_blank: bool
         """
         self.grid[row][col] = Cell(
             letter=letter.upper() if letter else None,
@@ -95,8 +113,11 @@ class ScrabbleBoard:
         Check if a cell is empty.
 
         :param row: Row index (0-14).
+        :type row: int
         :param col: Column index (0-14).
+        :type col: int
         :returns: True if the cell has no letter.
+        :rtype: bool
         """
         return self.grid[row][col].letter is None
 
@@ -105,6 +126,7 @@ class ScrabbleBoard:
         Iterate over all cells with their coordinates.
 
         :returns: Iterator yielding (row, col, cell) tuples.
+        :rtype: Iterator[tuple[int, int, Cell]]
         """
         for row_idx, row in enumerate(self.grid):
             for col_idx, cell in enumerate(row):
@@ -115,6 +137,7 @@ class ScrabbleBoard:
         Convert board to list of strings for display or serialization.
 
         :returns: List of 15 strings representing the board.
+        :rtype: list[str]
         """
         return ["".join(str(cell) for cell in row) for row in self.grid]
 

@@ -15,6 +15,7 @@ def main() -> int:
     Run the board analyzer CLI.
 
     :returns: Exit code (0 for success, 1 for failure).
+    :rtype: int
     """
     parser = argparse.ArgumentParser(
         description="Analyze a Scrabble board screenshot"
